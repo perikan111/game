@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D マインスイーパー</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a1a;
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+      overflow: hidden;
+      user-select: none;
+    }
+    #canvas-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+    #ui {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      z-index: 10;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .stat-label {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.6;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    #mines-left { color: #ff4466; }
+    #timer { color: #44aaff; }
+    #status-btn {
+      cursor: pointer;
+      font-size: 32px;
+      background: none;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      width: 52px; height: 52px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      color: #fff;
+    }
+    #status-btn:hover {
+      border-color: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.1);
+      transform: scale(1.05);
+    }
+    #difficulty-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.1);
+      z-index: 10;
+    }
+    .diff-btn {
+      cursor: pointer;
+      padding: 6px 18px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: transparent;
+      color: rgba(255,255,255,0.7);
+      font-size: 13px;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .diff-btn:hover, .diff-btn.active {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.8);
+      color: #fff;
+    }
+    #hint {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      opacity: 0.4;
+      letter-spacing: 1px;
+      pointer-events: none;
+    }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.75);
+      backdrop-filter: blur(12px);
+      z-index: 20;
+      flex-direction: column;
+      gap: 20px;
+    }
+    #overlay.show { display: flex; }
+    #overlay-title {
+      font-size: 56px;
+      font-weight: 900;
+      letter-spacing: 4px;
+    }
+    #overlay-sub {
+      font-size: 18px;
+      opacity: 0.7;
+    }
+    #restart-overlay-btn {
+      cursor: pointer;
+      padding: 12px 40px;
+      border-radius: 30px;
+      border: 2px solid rgba(255,255,255,0.5);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 16px;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+      margin-top: 10px;
+    }
+    #restart-overlay-btn:hover {
+      background: rgba(255,255,255,0.25);
+      border-color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="ui">
+    <div class="stat">
+      <span class="stat-label">地雷</span>
+      <span class="stat-value" id="mines-left">000</span>
+    </div>
+    <button id="status-btn">😊</button>
+    <div class="stat">
+      <span class="stat-label">タイム</span>
+      <span class="stat-value" id="timer">000</span>
+    </div>
+  </div>
+
+  <div id="hint">左クリック: 開く  |  右クリック: フラグ  |  ドラッグ: 回転  |  スクロール: ズーム</div>
+
+  <div id="difficulty-bar">
+    <button class="diff-btn active" data-rows="9" data-cols="9" data-mines="10">初級 (9×9)</button>
+    <button class="diff-btn" data-rows="16" data-cols="16" data-mines="40">中級 (16×16)</button>
+    <button class="diff-btn" data-rows="16" data-cols="30" data-mines="99">上級 (16×30)</button>
+  </div>
+
+  <div id="overlay">
+    <div id="overlay-title"></div>
+    <div id="overlay-sub"></div>
+    <button id="restart-overlay-btn">もう一度</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // ─── Game State ──────────────────────────────────────────────────────────
+    let ROWS = 9, COLS = 9, MINE_COUNT = 10;
+    let board = [], revealed = [], flagged = [], minePos = new Set();
+    let gameState = 'idle'; // idle | playing | won | lost
+    let timerInterval = null, seconds = 0;
+    let firstClick = true;
+
+    // ─── Three.js Setup ──────────────────────────────────────────────────────
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a1a);
+    scene.fog = new THREE.FogExp2(0x0a0a1a, 0.04);
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 14, 18);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0x334466, 0.8);
+    scene.add(ambient);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    scene.add(dirLight);
+
+    const pointLight1 = new THREE.PointLight(0x4488ff, 1.5, 60);
+    pointLight1.position.set(-10, 15, 5);
+    scene.add(pointLight1);
+
+    const pointLight2 = new THREE.PointLight(0xff4488, 1.0, 60);
+    pointLight2.position.set(10, 10, -5);
+    scene.add(pointLight2);
+
+    // ─── Tile Materials ──────────────────────────────────────────────────────
+    const matHidden = new THREE.MeshPhongMaterial({ color: 0x2255aa, shininess: 60 });
+    const matRevealed = new THREE.MeshPhongMaterial({ color: 0x1a3a6a, shininess: 20 });
+    const matFlag = new THREE.MeshPhongMaterial({ color: 0xff4466, shininess: 80, emissive: 0x441122 });
+    const matMine = new THREE.MeshPhongMaterial({ color: 0x111111, shininess: 100, emissive: 0x330000 });
+    const matExploded = new THREE.MeshPhongMaterial({ color: 0xff2200, shininess: 120, emissive: 0x881100 });
+
+    const numberColors = [
+      0xffffff, 0x2266ff, 0x22aa44, 0xff3333,
+      0x8833aa, 0xaa2222, 0x22aaaa, 0x111111, 0x888888
+    ];
+
+    // ─── Board Group ─────────────────────────────────────────────────────────
+    const boardGroup = new THREE.Group();
+    scene.add(boardGroup);
+
+    let tileObjects = []; // 2D array of {mesh, label}
+    let particles = [];
+
+    function buildBoard() {
+      // Clear existing
+      while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+      tileObjects = [];
+      particles = [];
+
+      const GAP = 1.1;
+      const offX = -(COLS - 1) * GAP / 2;
+      const offZ = -(ROWS - 1) * GAP / 2;
+
+      const geo = new THREE.BoxGeometry(1, 0.35, 1);
+
+      for (let r = 0; r < ROWS; r++) {
+        tileObjects[r] = [];
+        for (let c = 0; c < COLS; c++) {
+          const mesh = new THREE.Mesh(geo, matHidden.clone());
+          mesh.position.set(offX + c * GAP, 0, offZ + r * GAP);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.userData = { r, c };
+          boardGroup.add(mesh);
+          tileObjects[r][c] = { mesh, labelMesh: null };
+        }
+      }
+
+      // Ground plane
+      const groundGeo = new THREE.PlaneGeometry(COLS * 1.1 + 2, ROWS * 1.1 + 2);
+      const groundMat = new THREE.MeshPhongMaterial({ color: 0x0d1a33, shininess: 5 });
+      const ground = new THREE.Mesh(groundGeo, groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -0.3;
+      ground.receiveShadow = true;
+      boardGroup.add(ground);
+    }
+
+    function initGame() {
+      board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+      revealed = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+      flagged = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+      minePos = new Set();
+      gameState = 'idle';
+      firstClick = true;
+      seconds = 0;
+      clearInterval(timerInterval);
+      document.getElementById('timer').textContent = '000';
+      document.getElementById('status-btn').textContent = '😊';
+      document.getElementById('overlay').classList.remove('show');
+      updateMinesLeft();
+      buildBoard();
+    }
+
+    function placeMines(safeR, safeC) {
+      const safe = new Set();
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = safeR + dr, nc = safeC + dc;
+          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS)
+            safe.add(nr * COLS + nc);
+        }
+      let placed = 0;
+      while (placed < MINE_COUNT) {
+        const idx = Math.floor(Math.random() * ROWS * COLS);
+        if (!safe.has(idx) && !minePos.has(idx)) {
+          minePos.add(idx);
+          board[Math.floor(idx / COLS)][idx % COLS] = -1;
+          placed++;
+        }
+      }
+      // Compute numbers
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (board[r][c] !== -1) {
+            let count = 0;
+            for (let dr = -1; dr <= 1; dr++)
+              for (let dc = -1; dc <= 1; dc++) {
+                const nr = r + dr, nc = c + dc;
+                if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc] === -1)
+                  count++;
+              }
+            board[r][c] = count;
+          }
+    }
+
+    // ─── Reveal Logic ────────────────────────────────────────────────────────
+    function revealCell(r, c) {
+      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
+      if (revealed[r][c] || flagged[r][c]) return;
+
+      revealed[r][c] = true;
+      const { mesh } = tileObjects[r][c];
+
+      if (board[r][c] === -1) {
+        // Mine!
+        mesh.material = matExploded.clone();
+        mesh.position.y = 0.3;
+        spawnExplosion(mesh.position);
+        gameOver(r, c);
+        return;
+      }
+
+      mesh.material = matRevealed.clone();
+      mesh.scale.y = 0.7;
+      mesh.position.y = -0.05;
+
+      if (board[r][c] > 0) {
+        addNumberLabel(r, c, board[r][c]);
+      } else {
+        // Flood fill
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++)
+            revealCell(r + dr, c + dc);
+      }
+
+      checkWin();
+    }
+
+    function addNumberLabel(r, c, num) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'transparent';
+      ctx.clearRect(0, 0, 128, 128);
+      ctx.font = 'bold 80px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#' + numberColors[num].toString(16).padStart(6, '0');
+      ctx.fillText(num, 64, 64);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+      const geo = new THREE.PlaneGeometry(0.75, 0.75);
+      const label = new THREE.Mesh(geo, mat);
+      const base = tileObjects[r][c].mesh.position;
+      label.position.set(base.x, 0.19, base.z);
+      label.rotation.x = -Math.PI / 2;
+      boardGroup.add(label);
+      tileObjects[r][c].labelMesh = label;
+    }
+
+    function toggleFlag(r, c) {
+      if (revealed[r][c]) return;
+      flagged[r][c] = !flagged[r][c];
+      const { mesh } = tileObjects[r][c];
+      if (flagged[r][c]) {
+        mesh.material = matFlag.clone();
+        mesh.position.y = 0.15;
+        addFlagIcon(r, c);
+      } else {
+        mesh.material = matHidden.clone();
+        mesh.position.y = 0;
+        removeFlagIcon(r, c);
+      }
+      updateMinesLeft();
+    }
+
+    function addFlagIcon(r, c) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 128, 128);
+      ctx.font = '72px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🚩', 64, 64);
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+      const geo = new THREE.PlaneGeometry(0.7, 0.7);
+      const flag = new THREE.Mesh(geo, mat);
+      const base = tileObjects[r][c].mesh.position;
+      flag.position.set(base.x, 0.32, base.z);
+      flag.rotation.x = -Math.PI / 2;
+      flag.userData.flagIcon = true;
+      boardGroup.add(flag);
+      if (!tileObjects[r][c].flagIcon) tileObjects[r][c].flagIcon = [];
+      tileObjects[r][c].flagIcon.push(flag);
+    }
+
+    function removeFlagIcon(r, c) {
+      if (tileObjects[r][c].flagIcon) {
+        tileObjects[r][c].flagIcon.forEach(m => boardGroup.remove(m));
+        tileObjects[r][c].flagIcon = [];
+      }
+    }
+
+    // ─── Game Over / Win ─────────────────────────────────────────────────────
+    function gameOver(explodeR, explodeC) {
+      gameState = 'lost';
+      clearInterval(timerInterval);
+      document.getElementById('status-btn').textContent = '😵';
+
+      // Reveal all mines with delay
+      let delay = 0;
+      minePos.forEach(idx => {
+        const r = Math.floor(idx / COLS), c = idx % COLS;
+        if (r === explodeR && c === explodeC) return;
+        delay += 60;
+        setTimeout(() => {
+          if (!flagged[r][c]) {
+            const { mesh } = tileObjects[r][c];
+            mesh.material = matMine.clone();
+            mesh.position.y = 0.2;
+            addMineIcon(r, c);
+          }
+        }, delay);
+      });
+
+      setTimeout(() => {
+        document.getElementById('overlay-title').textContent = '💥 ゲームオーバー';
+        document.getElementById('overlay-title').style.color = '#ff4466';
+        document.getElementById('overlay-sub').textContent = `${seconds} 秒 経過`;
+        document.getElementById('overlay').classList.add('show');
+      }, delay + 400);
+    }
+
+    function addMineIcon(r, c) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, 128, 128);
+      ctx.font = '72px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💣', 64, 64);
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+      const geo = new THREE.PlaneGeometry(0.7, 0.7);
+      const icon = new THREE.Mesh(geo, mat);
+      const base = tileObjects[r][c].mesh.position;
+      icon.position.set(base.x, 0.32, base.z);
+      icon.rotation.x = -Math.PI / 2;
+      boardGroup.add(icon);
+    }
+
+    function checkWin() {
+      let unrevealed = 0;
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (!revealed[r][c]) unrevealed++;
+      if (unrevealed === MINE_COUNT) {
+        gameState = 'won';
+        clearInterval(timerInterval);
+        document.getElementById('status-btn').textContent = '😎';
+        setTimeout(() => {
+          document.getElementById('overlay-title').textContent = '🎉 クリア！';
+          document.getElementById('overlay-title').style.color = '#44ffaa';
+          document.getElementById('overlay-sub').textContent = `${seconds} 秒でクリア！`;
+          document.getElementById('overlay').classList.add('show');
+        }, 300);
+      }
+    }
+
+    function updateMinesLeft() {
+      let flags = 0;
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (flagged[r][c]) flags++;
+      const left = MINE_COUNT - flags;
+      document.getElementById('mines-left').textContent = String(left).padStart(3, '0');
+    }
+
+    // ─── Particle Explosion ──────────────────────────────────────────────────
+    function spawnExplosion(pos) {
+      const geo = new THREE.SphereGeometry(0.08, 4, 4);
+      for (let i = 0; i < 24; i++) {
+        const mat = new THREE.MeshPhongMaterial({
+          color: [0xff4400, 0xff8800, 0xffcc00][Math.floor(Math.random() * 3)],
+          emissive: 0x440000
+        });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.copy(pos);
+        scene.add(p);
+        const vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 6,
+          Math.random() * 6 + 2,
+          (Math.random() - 0.5) * 6
+        );
+        particles.push({ mesh: p, vel, life: 1.0 });
+      }
+    }
+
+    // ─── Raycasting ──────────────────────────────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function getTileMeshes() {
+      const meshes = [];
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          meshes.push(tileObjects[r][c].mesh);
+      return meshes;
+    }
+
+    function onMouseDown(e) {
+      if (gameState === 'lost' || gameState === 'won') return;
+      if (isDragging) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(getTileMeshes());
+      if (!hits.length) return;
+
+      const { r, c } = hits[0].object.userData;
+      if (e.button === 2) {
+        if (gameState === 'idle') { gameState = 'playing'; startTimer(); }
+        toggleFlag(r, c);
+      } else if (e.button === 0) {
+        if (flagged[r][c]) return;
+        if (firstClick) {
+          firstClick = false;
+          placeMines(r, c);
+          gameState = 'playing';
+          startTimer();
+        }
+        revealCell(r, c);
+      }
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      seconds = 0;
+      timerInterval = setInterval(() => {
+        seconds = Math.min(seconds + 1, 999);
+        document.getElementById('timer').textContent = String(seconds).padStart(3, '0');
+      }, 1000);
+    }
+
+    // ─── Orbit Controls (manual) ─────────────────────────────────────────────
+    let isDragging = false;
+    let lastMouse = { x: 0, y: 0 };
+    let spherical = { theta: 0, phi: Math.PI / 4, radius: 22 };
+    const dragThreshold = 4;
+    let mouseDownPos = { x: 0, y: 0 };
+
+    renderer.domElement.addEventListener('mousedown', e => {
+      mouseDownPos = { x: e.clientX, y: e.clientY };
+      lastMouse = { x: e.clientX, y: e.clientY };
+      isDragging = false;
+      if (e.button === 0) renderer.domElement.addEventListener('mousemove', onDrag);
+    });
+
+    renderer.domElement.addEventListener('mouseup', e => {
+      const dx = e.clientX - mouseDownPos.x;
+      const dy = e.clientY - mouseDownPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) < dragThreshold) {
+        isDragging = false;
+        onMouseDown(e);
+      }
+      renderer.domElement.removeEventListener('mousemove', onDrag);
+      setTimeout(() => { isDragging = false; }, 0);
+    });
+
+    function onDrag(e) {
+      const dx = e.clientX - lastMouse.x;
+      const dy = e.clientY - lastMouse.y;
+      if (Math.abs(e.clientX - mouseDownPos.x) > dragThreshold ||
+          Math.abs(e.clientY - mouseDownPos.y) > dragThreshold) {
+        isDragging = true;
+      }
+      if (!isDragging) return;
+      spherical.theta -= dx * 0.008;
+      spherical.phi = Math.max(0.15, Math.min(Math.PI / 2.2, spherical.phi - dy * 0.006));
+      lastMouse = { x: e.clientX, y: e.clientY };
+      updateCamera();
+    }
+
+    renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+    renderer.domElement.addEventListener('mousedown', e => {
+      if (e.button === 2) {
+        onMouseDown(e);
+      }
+    });
+
+    renderer.domElement.addEventListener('wheel', e => {
+      spherical.radius = Math.max(8, Math.min(50, spherical.radius + e.deltaY * 0.05));
+      updateCamera();
+    }, { passive: true });
+
+    function updateCamera() {
+      camera.position.set(
+        spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta),
+        spherical.radius * Math.cos(spherical.phi),
+        spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta)
+      );
+      camera.lookAt(0, 0, 0);
+    }
+
+    // ─── Hover Highlight ─────────────────────────────────────────────────────
+    let hoveredMesh = null;
+    renderer.domElement.addEventListener('mousemove', e => {
+      if (isDragging) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(getTileMeshes());
+      if (hoveredMesh) {
+        const { r, c } = hoveredMesh.userData;
+        if (!revealed[r][c] && !flagged[r][c]) {
+          hoveredMesh.material.emissive.set(0x000000);
+        }
+        hoveredMesh = null;
+      }
+      if (hits.length) {
+        const mesh = hits[0].object;
+        const { r, c } = mesh.userData;
+        if (!revealed[r][c] && !flagged[r][c]) {
+          mesh.material.emissive.set(0x224488);
+          hoveredMesh = mesh;
+        }
+      }
+    });
+
+    // ─── UI Events ───────────────────────────────────────────────────────────
+    document.getElementById('status-btn').addEventListener('click', initGame);
+    document.getElementById('restart-overlay-btn').addEventListener('click', initGame);
+
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ROWS = parseInt(btn.dataset.rows);
+        COLS = parseInt(btn.dataset.cols);
+        MINE_COUNT = parseInt(btn.dataset.mines);
+        // Adjust camera for larger boards
+        spherical.radius = Math.max(22, COLS * 1.1);
+        updateCamera();
+        initGame();
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // ─── Animate ─────────────────────────────────────────────────────────────
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+
+      // Animate particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= dt * 1.2;
+        p.vel.y -= 9.8 * dt;
+        p.mesh.position.addScaledVector(p.vel, dt);
+        p.mesh.material.opacity = Math.max(0, p.life);
+        p.mesh.material.transparent = true;
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          particles.splice(i, 1);
+        }
+      }
+
+      // Gentle board bob
+      boardGroup.position.y = Math.sin(Date.now() * 0.0008) * 0.05;
+
+      renderer.render(scene, camera);
+    }
+
+    // ─── Start ───────────────────────────────────────────────────────────────
+    initGame();
+    animate();
+  </script>
+</body>
+</html>
