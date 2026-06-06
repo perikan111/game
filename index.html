@@ -604,11 +604,6 @@
     }
 
     renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-    renderer.domElement.addEventListener('mousedown', e => {
-      if (e.button === 2) {
-        onMouseDown(e);
-      }
-    });
 
     renderer.domElement.addEventListener('wheel', e => {
       spherical.radius = Math.max(8, Math.min(50, spherical.radius + e.deltaY * 0.05));
