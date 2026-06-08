@@ -224,8 +224,8 @@
     const matExploded = new THREE.MeshPhongMaterial({ color: 0xff2200, shininess: 120, emissive: 0x881100 });
 
     const numberColors = [
-      0xffffff, 0x2266ff, 0x22aa44, 0xff3333,
-      0x8833aa, 0xaa2222, 0x22aaaa, 0x111111, 0x888888
+      0xffffff, 0x55ddff, 0x44ff88, 0xff4444,
+      0xcc66ff, 0xff6644, 0x00ffee, 0xffffff, 0xaaaaaa
     ];
 
     // ─── Board Group ─────────────────────────────────────────────────────────
@@ -360,6 +360,10 @@
       ctx.font = 'bold 80px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 10;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(num, 64, 64);
       ctx.fillStyle = '#' + numberColors[num].toString(16).padStart(6, '0');
       ctx.fillText(num, 64, 64);
 
