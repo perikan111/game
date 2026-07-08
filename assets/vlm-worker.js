@@ -67,46 +67,50 @@ async function load() {
 }
 
 async function generate({ image, prompt }) {
-  const [processor, model] = await VLM.getInstance();
-
-  const messages = [
-    { role: "user", content: [{ type: "image", image }, { type: "text", text: prompt }] },
-  ];
-
-  const images = await Promise.all(
-    messages
-      .map((x) => x.content)
-      .flat(Infinity)
-      .filter((msg) => msg.image !== undefined)
-      .map((msg) => load_image(msg.image)),
-  );
-
-  const text = processor.apply_chat_template(messages, { add_generation_prompt: true });
-  const inputs = await processor(text, images);
-
-  let startTime;
-  let numTokens = 0;
-  let tps = 0;
-  const token_callback_function = () => {
-    startTime ??= performance.now();
-    if (numTokens++ > 0) {
-      tps = (numTokens / (performance.now() - startTime)) * 1000;
-    }
-  };
-  const callback_function = (output) => {
-    self.postMessage({ status: "update", output, tps, numTokens });
-  };
-
-  const streamer = new TextStreamer(processor.tokenizer, {
-    skip_prompt: true,
-    skip_special_tokens: true,
-    callback_function,
-    token_callback_function,
-  });
-
   self.postMessage({ status: "start" });
 
+  // Everything below can throw (bad frame, processor/template issues, OOM,
+  // WebGPU buffer errors, ...). It all has to be caught here, otherwise a
+  // rejection just vanishes and the page is left waiting forever with no
+  // "error" message ever posted back.
   try {
+    const [processor, model] = await VLM.getInstance();
+
+    const messages = [
+      { role: "user", content: [{ type: "image", image }, { type: "text", text: prompt }] },
+    ];
+
+    const images = await Promise.all(
+      messages
+        .map((x) => x.content)
+        .flat(Infinity)
+        .filter((msg) => msg.image !== undefined)
+        .map((msg) => load_image(msg.image)),
+    );
+
+    const text = processor.apply_chat_template(messages, { add_generation_prompt: true });
+    const inputs = await processor(text, images);
+
+    let startTime;
+    let numTokens = 0;
+    let tps = 0;
+    const token_callback_function = () => {
+      startTime ??= performance.now();
+      if (numTokens++ > 0) {
+        tps = (numTokens / (performance.now() - startTime)) * 1000;
+      }
+    };
+    const callback_function = (output) => {
+      self.postMessage({ status: "update", output, tps, numTokens });
+    };
+
+    const streamer = new TextStreamer(processor.tokenizer, {
+      skip_prompt: true,
+      skip_special_tokens: true,
+      callback_function,
+      token_callback_function,
+    });
+
     await model.generate({
       ...inputs,
       do_sample: false,
@@ -115,13 +119,19 @@ async function generate({ image, prompt }) {
       streamer,
       stopping_criteria,
     });
+
+    self.postMessage({ status: "complete" });
   } catch (e) {
     self.postMessage({ status: "error", data: e.toString() });
-    return;
   }
-
-  self.postMessage({ status: "complete" });
 }
+
+self.addEventListener("error", (e) => {
+  self.postMessage({ status: "error", data: `${e.message} (${e.filename}:${e.lineno})` });
+});
+self.addEventListener("unhandledrejection", (e) => {
+  self.postMessage({ status: "error", data: "Unhandled: " + e.reason });
+});
 
 self.addEventListener("message", async (e) => {
   const { type, data } = e.data;

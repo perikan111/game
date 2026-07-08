@@ -485,9 +485,13 @@
             loadBtn.disabled = false;
             progressItems.clear();
             renderProgress(progressItems);
+          } else {
+            caption.textContent = '(認識に失敗しました。次のフレームで再試行します)';
+            caption.classList.add('placeholder');
           }
           busy = false;
           setDetecting(false);
+          if (modelReady && analyzing) scheduleNext(Number(intervalSlider.value) * 1000);
           break;
       }
     });
