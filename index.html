@@ -1,707 +1,503 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D マインスイーパー</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #0a0a1a;
-      font-family: 'Segoe UI', sans-serif;
-      color: #fff;
-      overflow: hidden;
-      user-select: none;
-    }
-    #canvas-container {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-    }
-    #ui {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 24px;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(8px);
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      z-index: 10;
-    }
-    .stat {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-    }
-    .stat-label {
-      font-size: 10px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      opacity: 0.6;
-    }
-    .stat-value {
-      font-size: 28px;
-      font-weight: 700;
-      font-variant-numeric: tabular-nums;
-    }
-    #mines-left { color: #ff4466; }
-    #timer { color: #44aaff; }
-    #status-btn {
-      cursor: pointer;
-      font-size: 32px;
-      background: none;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      width: 52px; height: 52px;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.2s;
-      color: #fff;
-    }
-    #status-btn:hover {
-      border-color: rgba(255,255,255,0.8);
-      background: rgba(255,255,255,0.1);
-      transform: scale(1.05);
-    }
-    #difficulty-bar {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      padding: 12px;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(8px);
-      border-top: 1px solid rgba(255,255,255,0.1);
-      z-index: 10;
-    }
-    .diff-btn {
-      cursor: pointer;
-      padding: 6px 18px;
-      border-radius: 20px;
-      border: 1px solid rgba(255,255,255,0.3);
-      background: transparent;
-      color: rgba(255,255,255,0.7);
-      font-size: 13px;
-      letter-spacing: 1px;
-      transition: all 0.2s;
-    }
-    .diff-btn:hover, .diff-btn.active {
-      background: rgba(255,255,255,0.15);
-      border-color: rgba(255,255,255,0.8);
-      color: #fff;
-    }
-    #hint {
-      position: fixed;
-      bottom: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 12px;
-      opacity: 0.4;
-      letter-spacing: 1px;
-      pointer-events: none;
-    }
-    #overlay {
-      position: fixed;
-      inset: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(12px);
-      z-index: 20;
-      flex-direction: column;
-      gap: 20px;
-    }
-    #overlay.show { display: flex; }
-    #overlay-title {
-      font-size: 56px;
-      font-weight: 900;
-      letter-spacing: 4px;
-    }
-    #overlay-sub {
-      font-size: 18px;
-      opacity: 0.7;
-    }
-    #restart-overlay-btn {
-      cursor: pointer;
-      padding: 12px 40px;
-      border-radius: 30px;
-      border: 2px solid rgba(255,255,255,0.5);
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-      font-size: 16px;
-      letter-spacing: 2px;
-      transition: all 0.2s;
-      margin-top: 10px;
-    }
-    #restart-overlay-btn:hover {
-      background: rgba(255,255,255,0.25);
-      border-color: #fff;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EDGE VLM・作業手順の時系列検出</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0d;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif;
+  }
+  .page {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 24px 40px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .badge-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #f5a524;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .timer {
+    font-size: 28px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: #f5a524;
+    background: rgba(245, 165, 36, 0.1);
+    border: 1px solid rgba(245, 165, 36, 0.3);
+    border-radius: 10px;
+    padding: 8px 18px;
+    white-space: nowrap;
+  }
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 20px;
+  }
+  @media (max-width: 860px) {
+    .main { grid-template-columns: 1fr; }
+  }
+  .panel {
+    background: #131318;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .video-wrap {
+    position: relative;
+    background: #000;
+    aspect-ratio: 16 / 9;
+  }
+  .video-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    cursor: pointer;
+  }
+  .detecting-badge {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(225, 29, 72, 0.85);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    z-index: 2;
+  }
+  .detecting-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #fff;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.35);
+    cursor: pointer;
+    z-index: 3;
+    transition: opacity 0.2s;
+  }
+  .play-overlay.hidden { display: none; }
+  .play-overlay .btn {
+    width: 76px; height: 76px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .play-overlay .btn::after {
+    content: '';
+    border-style: solid;
+    border-width: 14px 0 14px 22px;
+    border-color: transparent transparent transparent #fff;
+    margin-left: 6px;
+  }
+  .vlm-output {
+    padding: 20px 24px 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .vlm-label {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+  }
+  .vlm-caption {
+    font-size: 21px;
+    font-weight: 700;
+    min-height: 30px;
+    margin-bottom: 18px;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: rgba(255,255,255,0.55);
+    background: transparent;
+    transition: all 0.2s;
+    font-weight: 600;
+  }
+  .chip.active {
+    border-color: transparent;
+    color: #0a0a0d;
+  }
+  .right-panel {
+    padding: 22px 22px 10px;
+  }
+  .right-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .right-header h2 {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .right-header .count {
+    font-size: 18px;
+    font-weight: 800;
+    color: #f5a524;
+  }
+  .right-note {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .checkbox {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    border: 2px solid rgba(255,255,255,0.25);
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 900;
+    color: transparent;
+    transition: all 0.25s;
+  }
+  .checkbox.checked {
+    border-color: transparent;
+    color: #0a0a0d;
+  }
+  .check-body { flex: 1; }
+  .check-title {
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .check-title .low-conf {
+    font-size: 11px;
+    font-weight: 700;
+    color: #f5a524;
+    opacity: 0.85;
+  }
+  .check-sub {
+    font-size: 12px;
+    color: rgba(255,255,255,0.45);
+    margin-top: 3px;
+  }
+  .check-time {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-top: 2px;
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+  .check-time.show { opacity: 1; }
+  .timeline {
+    margin-top: 24px;
+    padding: 4px 6px 0;
+  }
+  .timeline-track {
+    position: relative;
+    height: 6px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .timeline-fill {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    background: linear-gradient(90deg, #f5a524, #ff7a45);
+    border-radius: 3px;
+    width: 0%;
+  }
+  .timeline-dot {
+    position: absolute;
+    top: 50%;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    border: 2px solid #0a0a0d;
+    transform: translate(-50%, -50%);
+    transition: background 0.25s;
+  }
+  .timeline-dot.reached { background: var(--dot-color, #f5a524); }
+  .timeline-playhead {
+    position: absolute;
+    top: 50%;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: #f5a524;
+    border: 2px solid #0a0a0d;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px rgba(245,165,36,0.25);
+  }
+  .timeline-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-top: 8px;
+  }
+  footer {
+    text-align: center;
+    margin-top: 28px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+  }
+</style>
 </head>
 <body>
-  <div id="canvas-container"></div>
-
-  <div id="ui">
-    <div class="stat">
-      <span class="stat-label">地雷</span>
-      <span class="stat-value" id="mines-left">000</span>
+<div class="page">
+  <header>
+    <div>
+      <div class="badge-label">EDGE VLM・作業手順の時系列検出</div>
+      <h1>正解を渡さず、AIが動画から点検手順を検出する</h1>
     </div>
-    <button id="status-btn">😊</button>
-    <div class="stat">
-      <span class="stat-label">タイム</span>
-      <span class="stat-value" id="timer">000</span>
+    <div class="timer" id="timer">00.0s</div>
+  </header>
+
+  <div class="main">
+    <div class="panel">
+      <div class="video-wrap" id="videoWrap">
+        <div class="detecting-badge"><span class="dot"></span>DETECTING</div>
+        <video id="video" playsinline muted loop>
+          <source src="assets/edge-vlm-demo.webm" type="video/webm">
+          <source src="assets/edge-vlm-demo.mp4" type="video/mp4">
+        </video>
+        <div class="play-overlay" id="playOverlay"><div class="btn"></div></div>
+      </div>
+      <div class="vlm-output">
+        <div class="vlm-label">VLM 出力 — いま検出していること</div>
+        <div class="vlm-caption" id="caption">「コンロの上部を確認（待機）」</div>
+        <div class="chips" id="chips"></div>
+      </div>
+    </div>
+
+    <div class="panel right-panel">
+      <div class="right-header">
+        <h2>手順書（正解）</h2>
+        <span class="count" id="count">0/5</span>
+      </div>
+      <div class="right-note">※ この手順書はモデルに渡していない。検出結果で自動チェック。</div>
+      <div id="checklist"></div>
     </div>
   </div>
 
-  <div id="hint">左クリック: 開く  |  右クリック: フラグ  |  ドラッグ: 回転  |  スクロール: ズーム</div>
-
-  <div id="difficulty-bar">
-    <button class="diff-btn active" data-rows="9" data-cols="9" data-mines="10">初級 (9×9)</button>
-    <button class="diff-btn" data-rows="16" data-cols="16" data-mines="40">中級 (16×16)</button>
-    <button class="diff-btn" data-rows="16" data-cols="30" data-mines="99">上級 (16×30)</button>
+  <div class="timeline">
+    <div class="timeline-track" id="track">
+      <div class="timeline-fill" id="fill"></div>
+      <div class="timeline-playhead" id="playhead" style="left:0%"></div>
+    </div>
+    <div class="timeline-labels">
+      <span>0s</span>
+      <span id="durationLabel">--s</span>
+    </div>
   </div>
 
-  <div id="overlay">
-    <div id="overlay-title"></div>
-    <div id="overlay-sub"></div>
-    <button id="restart-overlay-btn">もう一度</button>
-  </div>
+  <footer>3D マインスイーパーは <a href="https://github.com/perikan111/game/commit/bb39a91" style="color:rgba(255,255,255,0.5)">コミット履歴</a> からご覧いただけます。</footer>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
-    // ─── Game State ──────────────────────────────────────────────────────────
-    let ROWS = 9, COLS = 9, MINE_COUNT = 10;
-    let board = [], revealed = [], flagged = [], minePos = new Set();
-    let gameState = 'idle'; // idle | playing | won | lost
-    let timerInterval = null, seconds = 0;
-    let firstClick = true;
+<script>
+  const CHIP_DEFS = [
+    { key: 'つまみ操作', color: '#f5a524' },
+    { key: '炎',       color: '#f5a524' },
+    { key: '指差し',   color: '#2dd4bf' },
+    { key: 'グリル開', color: '#4f8dfd' },
+    { key: '電池',     color: '#a78bfa' },
+  ];
 
-    // ─── Three.js Setup ──────────────────────────────────────────────────────
-    const container = document.getElementById('canvas-container');
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a1a);
-    scene.fog = new THREE.FogExp2(0x0a0a1a, 0.04);
+  const CAPTION_EVENTS = [
+    { t: 0.0,  text: 'コンロの上部を確認（待機）',               tags: [] },
+    { t: 1.2,  text: '手がつまみを回している',                     tags: ['つまみ操作'] },
+    { t: 2.5,  text: '手がつまみを操作している',                   tags: ['つまみ操作'] },
+    { t: 3.4,  text: '手がつまみを回している — 炎を確認',          tags: ['つまみ操作', '炎'] },
+    { t: 4.3,  text: '手がつまみを操作している（戻す）',           tags: ['つまみ操作'] },
+    { t: 5.3,  text: '手がつまみを操作している（指差し）',         tags: ['つまみ操作', '指差し'] },
+    { t: 6.3,  text: '手がコンロのつまみに近づいている（指差し）', tags: ['指差し'] },
+    { t: 7.3,  text: '手が下部の引き出しを開けている',             tags: ['グリル開'] },
+    { t: 8.3,  text: '手がグリルの引き出しを閉める',               tags: ['グリル開'] },
+    { t: 9.3,  text: '手がコンロの下部に近づいている',             tags: [] },
+    { t: 10.3, text: '手が下部の引き出しを操作している（指差し）', tags: ['指差し'] },
+    { t: 11.3, text: '手が下部の引き出しを開けている',             tags: ['グリル開'] },
+    { t: 12.3, text: '手が電池ケースを指差している',               tags: ['指差し', '電池'] },
+    { t: 13.3, text: '手が魚焼きグリルの引き出しを開けている',     tags: ['グリル開'] },
+    { t: 14.3, text: '手がコンロ下部の開口部に差し込まれている',   tags: [] },
+  ];
 
-    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
-    camera.position.set(0, 14, 18);
-    camera.lookAt(0, 0, 0);
+  const CHECKLIST = [
+    { t: 3.0,  title: '点火確認',         sub: 'つまみを回して点火→消火',       color: '#f5a524', lowConf: false },
+    { t: 5.0,  title: '指差し確認①',     sub: '点火の結果を指差し呼称',         color: '#2dd4bf', lowConf: false },
+    { t: 7.0,  title: 'グリル開閉',       sub: '魚焼きグリルを開けて閉じる',     color: '#4f8dfd', lowConf: false },
+    { t: 10.0, title: '指差し確認②',     sub: 'グリルの状態を指差し呼称',       color: '#2dd4bf', lowConf: true },
+    { t: 12.0, title: '電池確認',         sub: '点火用電池が入っているか',       color: '#a78bfa', lowConf: false },
+  ];
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(devicePixelRatio);
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
+  const video = document.getElementById('video');
+  const playOverlay = document.getElementById('playOverlay');
+  const videoWrap = document.getElementById('videoWrap');
+  const timer = document.getElementById('timer');
+  const caption = document.getElementById('caption');
+  const chipsEl = document.getElementById('chips');
+  const countEl = document.getElementById('count');
+  const checklistEl = document.getElementById('checklist');
+  const fill = document.getElementById('fill');
+  const playhead = document.getElementById('playhead');
+  const track = document.getElementById('track');
+  const durationLabel = document.getElementById('durationLabel');
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0x334466, 0.8);
-    scene.add(ambient);
+  chipsEl.innerHTML = CHIP_DEFS.map(c => `<span class="chip" data-key="${c.key}">${c.key}</span>`).join('');
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.set(2048, 2048);
-    scene.add(dirLight);
+  checklistEl.innerHTML = CHECKLIST.map((item, i) => `
+    <div class="check-item" data-index="${i}">
+      <div class="checkbox" style="--c: ${item.color}">✓</div>
+      <div class="check-body">
+        <div class="check-title">${item.title}${item.lowConf ? '<span class="low-conf">△低信頼</span>' : ''}</div>
+        <div class="check-sub">${item.sub}</div>
+      </div>
+      <div class="check-time" style="color:${item.color}">検出 t=${item.t.toFixed(1)}s</div>
+    </div>
+  `).join('');
 
-    const pointLight1 = new THREE.PointLight(0x4488ff, 1.5, 60);
-    pointLight1.position.set(-10, 15, 5);
-    scene.add(pointLight1);
+  function formatTime(t) {
+    const s = Math.max(0, t).toFixed(1);
+    const [intPart, decPart] = s.split('.');
+    return intPart.padStart(2, '0') + '.' + decPart + 's';
+  }
 
-    const pointLight2 = new THREE.PointLight(0xff4488, 1.0, 60);
-    pointLight2.position.set(10, 10, -5);
-    scene.add(pointLight2);
+  function render() {
+    const t = video.currentTime;
+    timer.textContent = formatTime(t);
 
-    // ─── Tile Materials ──────────────────────────────────────────────────────
-    const matHidden = new THREE.MeshPhongMaterial({ color: 0x2255aa, shininess: 60 });
-    const matRevealed = new THREE.MeshPhongMaterial({ color: 0x1a3a6a, shininess: 20 });
-    const matFlag = new THREE.MeshPhongMaterial({ color: 0xff4466, shininess: 80, emissive: 0x441122 });
-    const matMine = new THREE.MeshPhongMaterial({ color: 0x111111, shininess: 100, emissive: 0x330000 });
-    const matExploded = new THREE.MeshPhongMaterial({ color: 0xff2200, shininess: 120, emissive: 0x881100 });
-
-    const numberColors = [
-      0xffffff, 0x55ddff, 0x44ff88, 0xff4444,
-      0xcc66ff, 0xff6644, 0x00ffee, 0xffffff, 0xaaaaaa
-    ];
-
-    // ─── Board Group ─────────────────────────────────────────────────────────
-    const boardGroup = new THREE.Group();
-    scene.add(boardGroup);
-
-    let tileObjects = []; // 2D array of {mesh, label}
-    let particles = [];
-
-    function buildBoard() {
-      // Clear existing
-      while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
-      tileObjects = [];
-      particles = [];
-
-      const GAP = 1.1;
-      const offX = -(COLS - 1) * GAP / 2;
-      const offZ = -(ROWS - 1) * GAP / 2;
-
-      const geo = new THREE.BoxGeometry(1, 0.35, 1);
-
-      for (let r = 0; r < ROWS; r++) {
-        tileObjects[r] = [];
-        for (let c = 0; c < COLS; c++) {
-          const mesh = new THREE.Mesh(geo, matHidden.clone());
-          mesh.position.set(offX + c * GAP, 0, offZ + r * GAP);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          mesh.userData = { r, c };
-          boardGroup.add(mesh);
-          tileObjects[r][c] = { mesh, labelMesh: null };
-        }
-      }
-
-      // Ground plane
-      const groundGeo = new THREE.PlaneGeometry(COLS * 1.1 + 2, ROWS * 1.1 + 2);
-      const groundMat = new THREE.MeshPhongMaterial({ color: 0x0d1a33, shininess: 5 });
-      const ground = new THREE.Mesh(groundGeo, groundMat);
-      ground.rotation.x = -Math.PI / 2;
-      ground.position.y = -0.3;
-      ground.receiveShadow = true;
-      boardGroup.add(ground);
+    let current = CAPTION_EVENTS[0];
+    for (const ev of CAPTION_EVENTS) {
+      if (ev.t <= t) current = ev; else break;
     }
-
-    function initGame() {
-      board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-      revealed = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
-      flagged = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
-      minePos = new Set();
-      gameState = 'idle';
-      firstClick = true;
-      seconds = 0;
-      clearInterval(timerInterval);
-      document.getElementById('timer').textContent = '000';
-      document.getElementById('status-btn').textContent = '😊';
-      document.getElementById('overlay').classList.remove('show');
-      updateMinesLeft();
-      buildBoard();
-    }
-
-    function placeMines(safeR, safeC) {
-      const safe = new Set();
-      for (let dr = -1; dr <= 1; dr++)
-        for (let dc = -1; dc <= 1; dc++) {
-          const nr = safeR + dr, nc = safeC + dc;
-          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS)
-            safe.add(nr * COLS + nc);
-        }
-      let placed = 0;
-      while (placed < MINE_COUNT) {
-        const idx = Math.floor(Math.random() * ROWS * COLS);
-        if (!safe.has(idx) && !minePos.has(idx)) {
-          minePos.add(idx);
-          board[Math.floor(idx / COLS)][idx % COLS] = -1;
-          placed++;
-        }
-      }
-      // Compute numbers
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          if (board[r][c] !== -1) {
-            let count = 0;
-            for (let dr = -1; dr <= 1; dr++)
-              for (let dc = -1; dc <= 1; dc++) {
-                const nr = r + dr, nc = c + dc;
-                if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc] === -1)
-                  count++;
-              }
-            board[r][c] = count;
-          }
-    }
-
-    // ─── Reveal Logic ────────────────────────────────────────────────────────
-    function revealCell(r, c) {
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
-      if (revealed[r][c] || flagged[r][c]) return;
-
-      revealed[r][c] = true;
-      const { mesh } = tileObjects[r][c];
-
-      if (board[r][c] === -1) {
-        // Mine!
-        mesh.material = matExploded.clone();
-        mesh.position.y = 0.3;
-        spawnExplosion(mesh.position);
-        gameOver(r, c);
-        return;
-      }
-
-      mesh.material = matRevealed.clone();
-      mesh.scale.y = 0.7;
-      mesh.position.y = -0.05;
-
-      if (board[r][c] > 0) {
-        addNumberLabel(r, c, board[r][c]);
+    caption.textContent = `「${current.text}」`;
+    chipsEl.querySelectorAll('.chip').forEach(chip => {
+      const active = current.tags.includes(chip.dataset.key);
+      chip.classList.toggle('active', active);
+      if (active) {
+        const def = CHIP_DEFS.find(c => c.key === chip.dataset.key);
+        chip.style.background = def.color;
       } else {
-        // Flood fill
-        for (let dr = -1; dr <= 1; dr++)
-          for (let dc = -1; dc <= 1; dc++)
-            revealCell(r + dr, c + dc);
-      }
-
-      checkWin();
-    }
-
-    function addNumberLabel(r, c, num) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = 'transparent';
-      ctx.clearRect(0, 0, 128, 128);
-      ctx.font = 'bold 80px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-      ctx.lineWidth = 10;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(num, 64, 64);
-      ctx.fillStyle = '#' + numberColors[num].toString(16).padStart(6, '0');
-      ctx.fillText(num, 64, 64);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-      const geo = new THREE.PlaneGeometry(0.75, 0.75);
-      const label = new THREE.Mesh(geo, mat);
-      const base = tileObjects[r][c].mesh.position;
-      label.position.set(base.x, 0.19, base.z);
-      label.rotation.x = -Math.PI / 2;
-      boardGroup.add(label);
-      tileObjects[r][c].labelMesh = label;
-    }
-
-    function toggleFlag(r, c) {
-      if (revealed[r][c]) return;
-      flagged[r][c] = !flagged[r][c];
-      const { mesh } = tileObjects[r][c];
-      if (flagged[r][c]) {
-        mesh.material = matFlag.clone();
-        mesh.position.y = 0.15;
-        addFlagIcon(r, c);
-      } else {
-        mesh.material = matHidden.clone();
-        mesh.position.y = 0;
-        removeFlagIcon(r, c);
-      }
-      updateMinesLeft();
-    }
-
-    function addFlagIcon(r, c) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, 128, 128);
-      ctx.font = '72px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('🚩', 64, 64);
-      const tex = new THREE.CanvasTexture(canvas);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-      const geo = new THREE.PlaneGeometry(0.7, 0.7);
-      const flag = new THREE.Mesh(geo, mat);
-      const base = tileObjects[r][c].mesh.position;
-      flag.position.set(base.x, 0.32, base.z);
-      flag.rotation.x = -Math.PI / 2;
-      flag.userData.flagIcon = true;
-      boardGroup.add(flag);
-      if (!tileObjects[r][c].flagIcon) tileObjects[r][c].flagIcon = [];
-      tileObjects[r][c].flagIcon.push(flag);
-    }
-
-    function removeFlagIcon(r, c) {
-      if (tileObjects[r][c].flagIcon) {
-        tileObjects[r][c].flagIcon.forEach(m => boardGroup.remove(m));
-        tileObjects[r][c].flagIcon = [];
-      }
-    }
-
-    // ─── Game Over / Win ─────────────────────────────────────────────────────
-    function gameOver(explodeR, explodeC) {
-      gameState = 'lost';
-      clearInterval(timerInterval);
-      document.getElementById('status-btn').textContent = '😵';
-
-      // Reveal all mines with delay
-      let delay = 0;
-      minePos.forEach(idx => {
-        const r = Math.floor(idx / COLS), c = idx % COLS;
-        if (r === explodeR && c === explodeC) return;
-        delay += 60;
-        setTimeout(() => {
-          if (!flagged[r][c]) {
-            const { mesh } = tileObjects[r][c];
-            mesh.material = matMine.clone();
-            mesh.position.y = 0.2;
-            addMineIcon(r, c);
-          }
-        }, delay);
-      });
-
-      setTimeout(() => {
-        document.getElementById('overlay-title').textContent = '💥 ゲームオーバー';
-        document.getElementById('overlay-title').style.color = '#ff4466';
-        document.getElementById('overlay-sub').textContent = `${seconds} 秒 経過`;
-        document.getElementById('overlay').classList.add('show');
-      }, delay + 400);
-    }
-
-    function addMineIcon(r, c) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, 128, 128);
-      ctx.font = '72px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('💣', 64, 64);
-      const tex = new THREE.CanvasTexture(canvas);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-      const geo = new THREE.PlaneGeometry(0.7, 0.7);
-      const icon = new THREE.Mesh(geo, mat);
-      const base = tileObjects[r][c].mesh.position;
-      icon.position.set(base.x, 0.32, base.z);
-      icon.rotation.x = -Math.PI / 2;
-      boardGroup.add(icon);
-    }
-
-    function checkWin() {
-      let unrevealed = 0;
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          if (!revealed[r][c]) unrevealed++;
-      if (unrevealed === MINE_COUNT) {
-        gameState = 'won';
-        clearInterval(timerInterval);
-        document.getElementById('status-btn').textContent = '😎';
-        setTimeout(() => {
-          document.getElementById('overlay-title').textContent = '🎉 クリア！';
-          document.getElementById('overlay-title').style.color = '#44ffaa';
-          document.getElementById('overlay-sub').textContent = `${seconds} 秒でクリア！`;
-          document.getElementById('overlay').classList.add('show');
-        }, 300);
-      }
-    }
-
-    function updateMinesLeft() {
-      let flags = 0;
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          if (flagged[r][c]) flags++;
-      const left = MINE_COUNT - flags;
-      document.getElementById('mines-left').textContent = String(left).padStart(3, '0');
-    }
-
-    // ─── Particle Explosion ──────────────────────────────────────────────────
-    function spawnExplosion(pos) {
-      const geo = new THREE.SphereGeometry(0.08, 4, 4);
-      for (let i = 0; i < 24; i++) {
-        const mat = new THREE.MeshPhongMaterial({
-          color: [0xff4400, 0xff8800, 0xffcc00][Math.floor(Math.random() * 3)],
-          emissive: 0x440000
-        });
-        const p = new THREE.Mesh(geo, mat);
-        p.position.copy(pos);
-        scene.add(p);
-        const vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 6,
-          Math.random() * 6 + 2,
-          (Math.random() - 0.5) * 6
-        );
-        particles.push({ mesh: p, vel, life: 1.0 });
-      }
-    }
-
-    // ─── Raycasting ──────────────────────────────────────────────────────────
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    function getTileMeshes() {
-      const meshes = [];
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          meshes.push(tileObjects[r][c].mesh);
-      return meshes;
-    }
-
-    function onMouseDown(e) {
-      if (gameState === 'lost' || gameState === 'won') return;
-      if (isDragging) return;
-
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
-      const hits = raycaster.intersectObjects(getTileMeshes());
-      if (!hits.length) return;
-
-      const { r, c } = hits[0].object.userData;
-      if (e.button === 2) {
-        if (gameState === 'idle') { gameState = 'playing'; startTimer(); }
-        toggleFlag(r, c);
-      } else if (e.button === 0) {
-        if (flagged[r][c]) return;
-        if (firstClick) {
-          firstClick = false;
-          placeMines(r, c);
-          gameState = 'playing';
-          startTimer();
-        }
-        revealCell(r, c);
-      }
-    }
-
-    function startTimer() {
-      clearInterval(timerInterval);
-      seconds = 0;
-      timerInterval = setInterval(() => {
-        seconds = Math.min(seconds + 1, 999);
-        document.getElementById('timer').textContent = String(seconds).padStart(3, '0');
-      }, 1000);
-    }
-
-    // ─── Orbit Controls (manual) ─────────────────────────────────────────────
-    let isDragging = false;
-    let lastMouse = { x: 0, y: 0 };
-    let spherical = { theta: 0, phi: Math.PI / 4, radius: 22 };
-    const dragThreshold = 4;
-    let mouseDownPos = { x: 0, y: 0 };
-
-    renderer.domElement.addEventListener('mousedown', e => {
-      mouseDownPos = { x: e.clientX, y: e.clientY };
-      lastMouse = { x: e.clientX, y: e.clientY };
-      isDragging = false;
-      if (e.button === 0) renderer.domElement.addEventListener('mousemove', onDrag);
-    });
-
-    renderer.domElement.addEventListener('mouseup', e => {
-      const dx = e.clientX - mouseDownPos.x;
-      const dy = e.clientY - mouseDownPos.y;
-      if (Math.sqrt(dx * dx + dy * dy) < dragThreshold) {
-        isDragging = false;
-        onMouseDown(e);
-      }
-      renderer.domElement.removeEventListener('mousemove', onDrag);
-      setTimeout(() => { isDragging = false; }, 0);
-    });
-
-    function onDrag(e) {
-      const dx = e.clientX - lastMouse.x;
-      const dy = e.clientY - lastMouse.y;
-      if (Math.abs(e.clientX - mouseDownPos.x) > dragThreshold ||
-          Math.abs(e.clientY - mouseDownPos.y) > dragThreshold) {
-        isDragging = true;
-      }
-      if (!isDragging) return;
-      spherical.theta -= dx * 0.008;
-      spherical.phi = Math.max(0.15, Math.min(Math.PI / 2.2, spherical.phi - dy * 0.006));
-      lastMouse = { x: e.clientX, y: e.clientY };
-      updateCamera();
-    }
-
-    renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-
-    renderer.domElement.addEventListener('wheel', e => {
-      spherical.radius = Math.max(8, Math.min(50, spherical.radius + e.deltaY * 0.05));
-      updateCamera();
-    }, { passive: true });
-
-    function updateCamera() {
-      camera.position.set(
-        spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta),
-        spherical.radius * Math.cos(spherical.phi),
-        spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta)
-      );
-      camera.lookAt(0, 0, 0);
-    }
-
-    // ─── Hover Highlight ─────────────────────────────────────────────────────
-    let hoveredMesh = null;
-    renderer.domElement.addEventListener('mousemove', e => {
-      if (isDragging) return;
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const hits = raycaster.intersectObjects(getTileMeshes());
-      if (hoveredMesh) {
-        const { r, c } = hoveredMesh.userData;
-        if (!revealed[r][c] && !flagged[r][c]) {
-          hoveredMesh.material.emissive.set(0x000000);
-        }
-        hoveredMesh = null;
-      }
-      if (hits.length) {
-        const mesh = hits[0].object;
-        const { r, c } = mesh.userData;
-        if (!revealed[r][c] && !flagged[r][c]) {
-          mesh.material.emissive.set(0x224488);
-          hoveredMesh = mesh;
-        }
+        chip.style.background = 'transparent';
       }
     });
 
-    // ─── UI Events ───────────────────────────────────────────────────────────
-    document.getElementById('status-btn').addEventListener('click', initGame);
-    document.getElementById('restart-overlay-btn').addEventListener('click', initGame);
-
-    document.querySelectorAll('.diff-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        ROWS = parseInt(btn.dataset.rows);
-        COLS = parseInt(btn.dataset.cols);
-        MINE_COUNT = parseInt(btn.dataset.mines);
-        // Adjust camera for larger boards
-        spherical.radius = Math.max(22, COLS * 1.1);
-        updateCamera();
-        initGame();
-      });
+    let doneCount = 0;
+    checklistEl.querySelectorAll('.check-item').forEach((el, i) => {
+      const item = CHECKLIST[i];
+      const done = t >= item.t;
+      if (done) doneCount++;
+      const box = el.querySelector('.checkbox');
+      box.classList.toggle('checked', done);
+      box.style.background = done ? item.color : 'transparent';
+      box.style.borderColor = done ? item.color : 'rgba(255,255,255,0.25)';
+      el.querySelector('.check-time').classList.toggle('show', done);
     });
+    countEl.textContent = `${doneCount}/${CHECKLIST.length}`;
 
-    window.addEventListener('resize', () => {
-      camera.aspect = innerWidth / innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
+    const dur = video.duration || 15.3;
+    const pct = Math.min(100, (t / dur) * 100);
+    fill.style.width = pct + '%';
+    playhead.style.left = pct + '%';
+  }
+
+  video.addEventListener('timeupdate', render);
+  video.addEventListener('loadedmetadata', () => {
+    durationLabel.textContent = formatTime(video.duration);
+    renderDots();
+    render();
+  });
+
+  function renderDots() {
+    const dur = video.duration || 15.3;
+    document.querySelectorAll('.timeline-dot').forEach(d => d.remove());
+    CHECKLIST.forEach(item => {
+      const dot = document.createElement('div');
+      dot.className = 'timeline-dot';
+      dot.style.left = (item.t / dur * 100) + '%';
+      dot.style.setProperty('--dot-color', item.color);
+      dot.dataset.t = item.t;
+      track.appendChild(dot);
     });
+  }
 
-    // ─── Animate ─────────────────────────────────────────────────────────────
-    const clock = new THREE.Clock();
-    function animate() {
-      requestAnimationFrame(animate);
-      const dt = clock.getDelta();
+  function updateDotStates() {
+    const t = video.currentTime;
+    track.querySelectorAll('.timeline-dot').forEach(dot => {
+      dot.classList.toggle('reached', t >= parseFloat(dot.dataset.t));
+    });
+  }
+  video.addEventListener('timeupdate', updateDotStates);
 
-      // Animate particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.life -= dt * 1.2;
-        p.vel.y -= 9.8 * dt;
-        p.mesh.position.addScaledVector(p.vel, dt);
-        p.mesh.material.opacity = Math.max(0, p.life);
-        p.mesh.material.transparent = true;
-        if (p.life <= 0) {
-          scene.remove(p.mesh);
-          particles.splice(i, 1);
-        }
-      }
-
-      // Gentle board bob
-      boardGroup.position.y = Math.sin(Date.now() * 0.0008) * 0.05;
-
-      renderer.render(scene, camera);
+  function togglePlay() {
+    if (video.paused) {
+      video.play();
+      playOverlay.classList.add('hidden');
+    } else {
+      video.pause();
+      playOverlay.classList.remove('hidden');
     }
+  }
+  playOverlay.addEventListener('click', togglePlay);
+  video.addEventListener('click', togglePlay);
+  video.addEventListener('play', () => playOverlay.classList.add('hidden'));
+  video.addEventListener('pause', () => playOverlay.classList.remove('hidden'));
 
-    // ─── Start ───────────────────────────────────────────────────────────────
-    initGame();
-    animate();
-  </script>
+  track.addEventListener('click', (e) => {
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    video.currentTime = ratio * (video.duration || 15.3);
+    render();
+  });
+
+  render();
+</script>
 </body>
 </html>
