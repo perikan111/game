@@ -58,6 +58,10 @@ async function load() {
     await VLM.getInstance((x) => self.postMessage(x));
     self.postMessage({ status: "ready" });
   } catch (e) {
+    // Drop the cached (rejected) promises so the next "load" retry actually
+    // re-fetches instead of immediately re-throwing the same failure.
+    VLM.processor = undefined;
+    VLM.model = undefined;
     self.postMessage({ status: "error", data: e.toString() });
   }
 }

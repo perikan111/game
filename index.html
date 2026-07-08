@@ -479,9 +479,13 @@
           if (analyzing) scheduleNext(Number(intervalSlider.value) * 1000);
           break;
         case 'error':
-          showError(d.data);
+          showError(d.data + (modelReady ? '' : ' (もう一度お試しください)'));
           setStatusPill('エラー');
-          if (!modelReady) loadBtn.disabled = true;
+          if (!modelReady) {
+            loadBtn.disabled = false;
+            progressItems.clear();
+            renderProgress(progressItems);
+          }
           busy = false;
           setDetecting(false);
           break;
