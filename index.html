@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EDGE VLM・作業手順の時系列検出</title>
+<title>ローカルAIカメラ解説・EDGE VLM</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -33,20 +33,26 @@
     margin-bottom: 6px;
   }
   h1 {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     line-height: 1.3;
   }
-  .timer {
-    font-size: 28px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
+  .subtitle {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 6px;
+    max-width: 640px;
+    line-height: 1.6;
+  }
+  .status-pill {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 10px;
+    white-space: nowrap;
     color: #f5a524;
     background: rgba(245, 165, 36, 0.1);
     border: 1px solid rgba(245, 165, 36, 0.3);
-    border-radius: 10px;
-    padding: 8px 18px;
-    white-space: nowrap;
   }
   .main {
     display: grid;
@@ -66,22 +72,30 @@
     position: relative;
     background: #000;
     aspect-ratio: 16 / 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .video-wrap video {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    cursor: pointer;
   }
-  .detecting-badge {
+  .video-placeholder {
+    color: rgba(255,255,255,0.35);
+    font-size: 14px;
+    text-align: center;
+    padding: 20px;
+  }
+  .live-badge {
     position: absolute;
     top: 14px;
     left: 14px;
     display: flex;
     align-items: center;
     gap: 6px;
-    background: rgba(225, 29, 72, 0.85);
+    background: rgba(100, 116, 139, 0.7);
     color: #fff;
     font-size: 12px;
     font-weight: 700;
@@ -89,81 +103,104 @@
     padding: 5px 12px;
     border-radius: 20px;
     z-index: 2;
+    transition: background 0.2s;
   }
-  .detecting-badge .dot {
+  .live-badge.detecting { background: rgba(225, 29, 72, 0.85); }
+  .live-badge .dot {
     width: 7px; height: 7px;
     border-radius: 50%;
     background: #fff;
-    animation: pulse 1.2s infinite;
   }
+  .live-badge.detecting .dot { animation: pulse 1.2s infinite; }
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
   }
-  .play-overlay {
+  .cam-switch {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.35);
-    cursor: pointer;
-    z-index: 3;
-    transition: opacity 0.2s;
-  }
-  .play-overlay.hidden { display: none; }
-  .play-overlay .btn {
-    width: 76px; height: 76px;
+    top: 14px;
+    right: 14px;
+    z-index: 2;
+    width: 36px; height: 36px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.15);
-    border: 2px solid rgba(255,255,255,0.6);
-    display: flex; align-items: center; justify-content: center;
-    backdrop-filter: blur(4px);
-  }
-  .play-overlay .btn::after {
-    content: '';
-    border-style: solid;
-    border-width: 14px 0 14px 22px;
-    border-color: transparent transparent transparent #fff;
-    margin-left: 6px;
+    border: 1px solid rgba(255,255,255,0.3);
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
   }
   .vlm-output {
     padding: 20px 24px 24px;
     border-top: 1px solid rgba(255,255,255,0.08);
   }
   .vlm-label {
+    display: flex;
+    justify-content: space-between;
     font-size: 12px;
     color: rgba(255,255,255,0.5);
     letter-spacing: 0.5px;
     margin-bottom: 10px;
   }
   .vlm-caption {
-    font-size: 21px;
+    font-size: 19px;
     font-weight: 700;
     min-height: 30px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
+    line-height: 1.5;
   }
-  .chips {
+  .vlm-caption.placeholder {
+    color: rgba(255,255,255,0.3);
+    font-weight: 500;
+    font-size: 15px;
+  }
+  .controls-row {
     display: flex;
     flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .prompt-input {
+    flex: 1;
+    min-width: 220px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: #fff;
+    padding: 10px 12px;
+    font-size: 13px;
+    resize: none;
+  }
+  .interval-box {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    display: flex;
+    align-items: center;
     gap: 8px;
   }
-  .chip {
-    font-size: 13px;
-    padding: 6px 14px;
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.25);
-    color: rgba(255,255,255,0.55);
-    background: transparent;
+  .interval-box input { accent-color: #f5a524; }
+  .btn {
+    cursor: pointer;
+    padding: 10px 22px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
     transition: all 0.2s;
-    font-weight: 600;
+    white-space: nowrap;
   }
-  .chip.active {
-    border-color: transparent;
-    color: #0a0a0d;
-  }
+  .btn:hover:not(:disabled) { background: rgba(255,255,255,0.16); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.primary { background: #f5a524; border-color: #f5a524; color: #16130a; }
+  .btn.primary:hover:not(:disabled) { background: #ffb84d; }
+  .btn.danger { background: rgba(225,29,72,0.85); border-color: transparent; }
+
   .right-panel {
     padding: 22px 22px 10px;
+    display: flex;
+    flex-direction: column;
+    max-height: 720px;
   }
   .right-header {
     display: flex;
@@ -171,117 +208,83 @@
     align-items: baseline;
     margin-bottom: 4px;
   }
-  .right-header h2 {
-    font-size: 18px;
+  .right-header h2 { font-size: 18px; font-weight: 700; }
+  .right-header .tps {
+    font-size: 12px;
     font-weight: 700;
-  }
-  .right-header .count {
-    font-size: 18px;
-    font-weight: 800;
     color: #f5a524;
   }
   .right-note {
     font-size: 11px;
     color: rgba(255,255,255,0.4);
-    margin-bottom: 18px;
+    margin-bottom: 14px;
     line-height: 1.5;
   }
-  .check-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 14px 0;
+  .log-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .log-item {
+    padding: 12px 0;
     border-top: 1px solid rgba(255,255,255,0.08);
   }
-  .checkbox {
-    width: 22px; height: 22px;
-    border-radius: 6px;
-    border: 2px solid rgba(255,255,255,0.25);
-    flex-shrink: 0;
-    margin-top: 2px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    font-weight: 900;
-    color: transparent;
-    transition: all 0.25s;
-  }
-  .checkbox.checked {
-    border-color: transparent;
-    color: #0a0a0d;
-  }
-  .check-body { flex: 1; }
-  .check-title {
-    font-size: 15px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .check-title .low-conf {
+  .log-time {
     font-size: 11px;
-    font-weight: 700;
     color: #f5a524;
-    opacity: 0.85;
-  }
-  .check-sub {
-    font-size: 12px;
-    color: rgba(255,255,255,0.45);
-    margin-top: 3px;
-  }
-  .check-time {
-    font-size: 12px;
     font-weight: 700;
-    white-space: nowrap;
-    margin-top: 2px;
-    opacity: 0;
-    transition: opacity 0.25s;
+    font-variant-numeric: tabular-nums;
   }
-  .check-time.show { opacity: 1; }
-  .timeline {
-    margin-top: 24px;
-    padding: 4px 6px 0;
+  .log-text {
+    font-size: 13px;
+    margin-top: 4px;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.85);
   }
-  .timeline-track {
-    position: relative;
-    height: 6px;
-    background: rgba(255,255,255,0.12);
-    border-radius: 3px;
-    cursor: pointer;
+  .log-empty {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    padding: 12px 0;
   }
-  .timeline-fill {
-    position: absolute;
-    top: 0; left: 0; bottom: 0;
-    background: linear-gradient(90deg, #f5a524, #ff7a45);
-    border-radius: 3px;
-    width: 0%;
+
+  .setup-card {
+    padding: 28px 24px;
   }
-  .timeline-dot {
-    position: absolute;
-    top: 50%;
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.25);
-    border: 2px solid #0a0a0d;
-    transform: translate(-50%, -50%);
-    transition: background 0.25s;
+  .setup-card p {
+    font-size: 13px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.7;
+    margin-bottom: 16px;
   }
-  .timeline-dot.reached { background: var(--dot-color, #f5a524); }
-  .timeline-playhead {
-    position: absolute;
-    top: 50%;
-    width: 16px; height: 16px;
-    border-radius: 50%;
-    background: #f5a524;
-    border: 2px solid #0a0a0d;
-    transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 4px rgba(245,165,36,0.25);
-  }
-  .timeline-labels {
+  .setup-card p b { color: #f5a524; }
+  .progress-item { margin-bottom: 10px; }
+  .progress-item .label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
     display: flex;
     justify-content: space-between;
-    font-size: 11px;
-    color: rgba(255,255,255,0.4);
-    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.1);
+    overflow: hidden;
+  }
+  .progress-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg, #f5a524, #ff7a45);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .error-box {
+    color: #ff6a7a;
+    font-size: 13px;
+    background: rgba(225,29,72,0.1);
+    border: 1px solid rgba(225,29,72,0.3);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    line-height: 1.6;
   }
   footer {
     text-align: center;
@@ -289,215 +292,298 @@
     font-size: 12px;
     color: rgba(255,255,255,0.3);
   }
+  footer a { color: rgba(255,255,255,0.5); }
 </style>
 </head>
 <body>
 <div class="page">
   <header>
     <div>
-      <div class="badge-label">EDGE VLM・作業手順の時系列検出</div>
-      <h1>正解を渡さず、AIが動画から点検手順を検出する</h1>
+      <div class="badge-label">EDGE VLM・オンデバイス推論</div>
+      <h1>スマホのカメラ映像を、ローカルAIがその場で解説する</h1>
+      <div class="subtitle">画像は一切サーバーに送信されません。モデルのダウンロード後は、機内モードでも動作します(WebGPU 対応ブラウザが必要です)。</div>
     </div>
-    <div class="timer" id="timer">00.0s</div>
+    <div class="status-pill" id="statusPill">未読み込み</div>
   </header>
 
   <div class="main">
     <div class="panel">
       <div class="video-wrap" id="videoWrap">
-        <div class="detecting-badge"><span class="dot"></span>DETECTING</div>
-        <video id="video" playsinline muted loop>
-          <source src="assets/edge-vlm-demo.webm" type="video/webm">
-          <source src="assets/edge-vlm-demo.mp4" type="video/mp4">
-        </video>
-        <div class="play-overlay" id="playOverlay"><div class="btn"></div></div>
+        <div class="video-placeholder" id="videoPlaceholder">カメラ映像はここに表示されます</div>
+        <div class="live-badge" id="liveBadge"><span class="dot"></span><span id="liveBadgeText">OFF</span></div>
+        <button class="cam-switch" id="camSwitch" title="前面/背面カメラ切替" style="display:none;">⟳</button>
+        <video id="video" playsinline muted style="display:none;"></video>
       </div>
-      <div class="vlm-output">
-        <div class="vlm-label">VLM 出力 — いま検出していること</div>
-        <div class="vlm-caption" id="caption">「コンロの上部を確認（待機）」</div>
-        <div class="chips" id="chips"></div>
+
+      <div id="setupCard" class="setup-card">
+        <p>
+          このページは <b>HuggingFaceTB/SmolVLM-Instruct</b>(約2Bパラメータ)を、
+          <b>transformers.js + WebGPU</b> でブラウザ内に直接ダウンロードして実行します。
+          初回のみ約 1.5〜2GB のモデルファイルを取得するため、<b>Wi-Fi 環境</b>での利用を推奨します。
+          対応ブラウザは Android の Chrome/Edge、または WebGPU を有効化した最新の Safari です。
+        </p>
+        <div id="errorBox" style="display:none;" class="error-box"></div>
+        <div id="progressList"></div>
+        <button class="btn primary" id="loadBtn">ローカルAIモデルを読み込む</button>
+      </div>
+
+      <div class="vlm-output" id="vlmOutput" style="display:none;">
+        <div class="vlm-label">
+          <span>AI 出力 — いま見えているもの</span>
+        </div>
+        <div class="vlm-caption placeholder" id="caption">カメラを起動して「解析を開始」を押してください</div>
+        <div class="controls-row">
+          <button class="btn primary" id="camBtn">カメラを起動</button>
+          <button class="btn" id="toggleBtn" disabled>解析を開始</button>
+          <div class="interval-box">
+            撮影間隔
+            <input type="range" id="intervalSlider" min="1.5" max="8" step="0.5" value="3">
+            <span id="intervalLabel">3.0秒</span>
+          </div>
+        </div>
+        <div class="controls-row" style="margin-top:12px;">
+          <textarea class="prompt-input" id="promptInput" rows="2">この画像に写っているものと、起きていることを日本語で簡潔に説明してください。</textarea>
+        </div>
       </div>
     </div>
 
     <div class="panel right-panel">
       <div class="right-header">
-        <h2>手順書（正解）</h2>
-        <span class="count" id="count">0/5</span>
+        <h2>認識ログ</h2>
+        <span class="tps" id="tpsLabel"></span>
       </div>
-      <div class="right-note">※ この手順書はモデルに渡していない。検出結果で自動チェック。</div>
-      <div id="checklist"></div>
+      <div class="right-note">※ すべてローカルのブラウザ内で推論しています。ログはこの端末にのみ保持され、リロードすると消えます。</div>
+      <div class="log-list" id="logList">
+        <div class="log-empty">まだ解析結果はありません。</div>
+      </div>
     </div>
   </div>
 
-  <div class="timeline">
-    <div class="timeline-track" id="track">
-      <div class="timeline-fill" id="fill"></div>
-      <div class="timeline-playhead" id="playhead" style="left:0%"></div>
-    </div>
-    <div class="timeline-labels">
-      <span>0s</span>
-      <span id="durationLabel">--s</span>
-    </div>
-  </div>
-
-  <footer>3D マインスイーパーは <a href="https://github.com/perikan111/game/commit/bb39a91" style="color:rgba(255,255,255,0.5)">コミット履歴</a> からご覧いただけます。</footer>
+  <footer>3D マインスイーパーと録画デモの再現は <a href="https://github.com/perikan111/game/commits/claude/github-pages-browser-deploy-o3nekl">コミット履歴</a> からご覧いただけます。</footer>
 </div>
 
 <script>
-  const CHIP_DEFS = [
-    { key: 'つまみ操作', color: '#f5a524' },
-    { key: '炎',       color: '#f5a524' },
-    { key: '指差し',   color: '#2dd4bf' },
-    { key: 'グリル開', color: '#4f8dfd' },
-    { key: '電池',     color: '#a78bfa' },
-  ];
-
-  const CAPTION_EVENTS = [
-    { t: 0.0,  text: 'コンロの上部を確認（待機）',               tags: [] },
-    { t: 1.2,  text: '手がつまみを回している',                     tags: ['つまみ操作'] },
-    { t: 2.5,  text: '手がつまみを操作している',                   tags: ['つまみ操作'] },
-    { t: 3.4,  text: '手がつまみを回している — 炎を確認',          tags: ['つまみ操作', '炎'] },
-    { t: 4.3,  text: '手がつまみを操作している（戻す）',           tags: ['つまみ操作'] },
-    { t: 5.3,  text: '手がつまみを操作している（指差し）',         tags: ['つまみ操作', '指差し'] },
-    { t: 6.3,  text: '手がコンロのつまみに近づいている（指差し）', tags: ['指差し'] },
-    { t: 7.3,  text: '手が下部の引き出しを開けている',             tags: ['グリル開'] },
-    { t: 8.3,  text: '手がグリルの引き出しを閉める',               tags: ['グリル開'] },
-    { t: 9.3,  text: '手がコンロの下部に近づいている',             tags: [] },
-    { t: 10.3, text: '手が下部の引き出しを操作している（指差し）', tags: ['指差し'] },
-    { t: 11.3, text: '手が下部の引き出しを開けている',             tags: ['グリル開'] },
-    { t: 12.3, text: '手が電池ケースを指差している',               tags: ['指差し', '電池'] },
-    { t: 13.3, text: '手が魚焼きグリルの引き出しを開けている',     tags: ['グリル開'] },
-    { t: 14.3, text: '手がコンロ下部の開口部に差し込まれている',   tags: [] },
-  ];
-
-  const CHECKLIST = [
-    { t: 3.0,  title: '点火確認',         sub: 'つまみを回して点火→消火',       color: '#f5a524', lowConf: false },
-    { t: 5.0,  title: '指差し確認①',     sub: '点火の結果を指差し呼称',         color: '#2dd4bf', lowConf: false },
-    { t: 7.0,  title: 'グリル開閉',       sub: '魚焼きグリルを開けて閉じる',     color: '#4f8dfd', lowConf: false },
-    { t: 10.0, title: '指差し確認②',     sub: 'グリルの状態を指差し呼称',       color: '#2dd4bf', lowConf: true },
-    { t: 12.0, title: '電池確認',         sub: '点火用電池が入っているか',       color: '#a78bfa', lowConf: false },
-  ];
-
-  const video = document.getElementById('video');
-  const playOverlay = document.getElementById('playOverlay');
-  const videoWrap = document.getElementById('videoWrap');
-  const timer = document.getElementById('timer');
+  const statusPill = document.getElementById('statusPill');
+  const setupCard = document.getElementById('setupCard');
+  const errorBox = document.getElementById('errorBox');
+  const progressList = document.getElementById('progressList');
+  const loadBtn = document.getElementById('loadBtn');
+  const vlmOutput = document.getElementById('vlmOutput');
+  const camBtn = document.getElementById('camBtn');
+  const camSwitch = document.getElementById('camSwitch');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const intervalSlider = document.getElementById('intervalSlider');
+  const intervalLabel = document.getElementById('intervalLabel');
+  const promptInput = document.getElementById('promptInput');
   const caption = document.getElementById('caption');
-  const chipsEl = document.getElementById('chips');
-  const countEl = document.getElementById('count');
-  const checklistEl = document.getElementById('checklist');
-  const fill = document.getElementById('fill');
-  const playhead = document.getElementById('playhead');
-  const track = document.getElementById('track');
-  const durationLabel = document.getElementById('durationLabel');
+  const logList = document.getElementById('logList');
+  const tpsLabel = document.getElementById('tpsLabel');
+  const video = document.getElementById('video');
+  const videoPlaceholder = document.getElementById('videoPlaceholder');
+  const liveBadge = document.getElementById('liveBadge');
+  const liveBadgeText = document.getElementById('liveBadgeText');
 
-  chipsEl.innerHTML = CHIP_DEFS.map(c => `<span class="chip" data-key="${c.key}">${c.key}</span>`).join('');
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
 
-  checklistEl.innerHTML = CHECKLIST.map((item, i) => `
-    <div class="check-item" data-index="${i}">
-      <div class="checkbox" style="--c: ${item.color}">✓</div>
-      <div class="check-body">
-        <div class="check-title">${item.title}${item.lowConf ? '<span class="low-conf">△低信頼</span>' : ''}</div>
-        <div class="check-sub">${item.sub}</div>
-      </div>
-      <div class="check-time" style="color:${item.color}">検出 t=${item.t.toFixed(1)}s</div>
-    </div>
-  `).join('');
+  let worker = null;
+  let modelReady = false;
+  let stream = null;
+  let facingMode = 'environment';
+  let analyzing = false;
+  let busy = false;
+  let pendingTimer = null;
+  let sessionStart = null;
+  let currentCaptionText = '';
 
-  function formatTime(t) {
-    const s = Math.max(0, t).toFixed(1);
-    const [intPart, decPart] = s.split('.');
-    return intPart.padStart(2, '0') + '.' + decPart + 's';
+  function setStatusPill(text) { statusPill.textContent = text; }
+
+  function showError(msg) {
+    errorBox.style.display = 'block';
+    errorBox.textContent = msg;
   }
 
-  function render() {
-    const t = video.currentTime;
-    timer.textContent = formatTime(t);
+  function formatElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
 
-    let current = CAPTION_EVENTS[0];
-    for (const ev of CAPTION_EVENTS) {
-      if (ev.t <= t) current = ev; else break;
-    }
-    caption.textContent = `「${current.text}」`;
-    chipsEl.querySelectorAll('.chip').forEach(chip => {
-      const active = current.tags.includes(chip.dataset.key);
-      chip.classList.toggle('active', active);
-      if (active) {
-        const def = CHIP_DEFS.find(c => c.key === chip.dataset.key);
-        chip.style.background = def.color;
-      } else {
-        chip.style.background = 'transparent';
+  function addLogEntry(text) {
+    const empty = logList.querySelector('.log-empty');
+    if (empty) empty.remove();
+    const item = document.createElement('div');
+    item.className = 'log-item';
+    item.innerHTML = `<div class="log-time">${formatElapsed(performance.now() - sessionStart)}</div><div class="log-text"></div>`;
+    item.querySelector('.log-text').textContent = text;
+    logList.insertBefore(item, logList.firstChild);
+  }
+
+  function setDetecting(on) {
+    liveBadge.classList.toggle('detecting', on);
+    liveBadgeText.textContent = on ? 'DETECTING' : (stream ? 'LIVE' : 'OFF');
+  }
+
+  // ─── Worker setup ────────────────────────────────────────────────────────
+  function initWorker() {
+    worker = new Worker('assets/vlm-worker.js', { type: 'module' });
+    worker.postMessage({ type: 'check' });
+    worker.addEventListener('error', (err) => {
+      console.error('Worker error:', err);
+      showError('AI 実行環境の初期化に失敗しました。ネットワーク接続を確認して、ページを再読み込みしてください。');
+      setStatusPill('エラー');
+      loadBtn.disabled = true;
+    });
+
+    const progressItems = new Map();
+
+    worker.addEventListener('message', (e) => {
+      const d = e.data;
+      switch (d.status) {
+        case 'loading':
+          setStatusPill('読み込み中…');
+          break;
+        case 'initiate':
+          progressItems.set(d.file, { progress: 0, total: d.total || 0 });
+          renderProgress(progressItems);
+          break;
+        case 'progress':
+          progressItems.set(d.file, { progress: d.progress || 0, total: d.total || 0 });
+          renderProgress(progressItems);
+          break;
+        case 'done':
+          progressItems.delete(d.file);
+          renderProgress(progressItems);
+          break;
+        case 'ready':
+          modelReady = true;
+          setStatusPill('モデル読み込み済み');
+          setupCard.style.display = 'none';
+          vlmOutput.style.display = 'block';
+          break;
+        case 'start':
+          currentCaptionText = '';
+          caption.classList.remove('placeholder');
+          caption.textContent = '…';
+          break;
+        case 'update':
+          currentCaptionText += d.output;
+          caption.textContent = currentCaptionText;
+          if (d.tps) tpsLabel.textContent = `${d.tps.toFixed(1)} tok/s`;
+          break;
+        case 'complete':
+          busy = false;
+          setDetecting(false);
+          if (currentCaptionText.trim()) addLogEntry(currentCaptionText.trim());
+          if (analyzing) scheduleNext(Number(intervalSlider.value) * 1000);
+          break;
+        case 'error':
+          showError(d.data);
+          setStatusPill('エラー');
+          if (!modelReady) loadBtn.disabled = true;
+          busy = false;
+          setDetecting(false);
+          break;
       }
     });
-
-    let doneCount = 0;
-    checklistEl.querySelectorAll('.check-item').forEach((el, i) => {
-      const item = CHECKLIST[i];
-      const done = t >= item.t;
-      if (done) doneCount++;
-      const box = el.querySelector('.checkbox');
-      box.classList.toggle('checked', done);
-      box.style.background = done ? item.color : 'transparent';
-      box.style.borderColor = done ? item.color : 'rgba(255,255,255,0.25)';
-      el.querySelector('.check-time').classList.toggle('show', done);
-    });
-    countEl.textContent = `${doneCount}/${CHECKLIST.length}`;
-
-    const dur = video.duration || 15.3;
-    const pct = Math.min(100, (t / dur) * 100);
-    fill.style.width = pct + '%';
-    playhead.style.left = pct + '%';
   }
 
-  video.addEventListener('timeupdate', render);
-  video.addEventListener('loadedmetadata', () => {
-    durationLabel.textContent = formatTime(video.duration);
-    renderDots();
-    render();
-  });
-
-  function renderDots() {
-    const dur = video.duration || 15.3;
-    document.querySelectorAll('.timeline-dot').forEach(d => d.remove());
-    CHECKLIST.forEach(item => {
-      const dot = document.createElement('div');
-      dot.className = 'timeline-dot';
-      dot.style.left = (item.t / dur * 100) + '%';
-      dot.style.setProperty('--dot-color', item.color);
-      dot.dataset.t = item.t;
-      track.appendChild(dot);
-    });
-  }
-
-  function updateDotStates() {
-    const t = video.currentTime;
-    track.querySelectorAll('.timeline-dot').forEach(dot => {
-      dot.classList.toggle('reached', t >= parseFloat(dot.dataset.t));
-    });
-  }
-  video.addEventListener('timeupdate', updateDotStates);
-
-  function togglePlay() {
-    if (video.paused) {
-      video.play();
-      playOverlay.classList.add('hidden');
-    } else {
-      video.pause();
-      playOverlay.classList.remove('hidden');
+  function renderProgress(items) {
+    progressList.innerHTML = '';
+    for (const [file, { progress, total }] of items) {
+      const pct = total ? Math.min(100, progress) : 0;
+      const div = document.createElement('div');
+      div.className = 'progress-item';
+      div.innerHTML = `<div class="label"><span>${file}</span><span>${pct.toFixed(0)}%</span></div><div class="progress-bar"><div style="width:${pct}%"></div></div>`;
+      progressList.appendChild(div);
     }
   }
-  playOverlay.addEventListener('click', togglePlay);
-  video.addEventListener('click', togglePlay);
-  video.addEventListener('play', () => playOverlay.classList.add('hidden'));
-  video.addEventListener('pause', () => playOverlay.classList.remove('hidden'));
 
-  track.addEventListener('click', (e) => {
-    const rect = track.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    video.currentTime = ratio * (video.duration || 15.3);
-    render();
+  loadBtn.addEventListener('click', () => {
+    errorBox.style.display = 'none';
+    loadBtn.disabled = true;
+    worker.postMessage({ type: 'load' });
   });
 
-  render();
+  initWorker();
+
+  // ─── Camera ──────────────────────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false,
+      });
+      video.srcObject = stream;
+      video.style.display = 'block';
+      videoPlaceholder.style.display = 'none';
+      camSwitch.style.display = 'block';
+      await video.play();
+      toggleBtn.disabled = false;
+      setDetecting(false);
+      camBtn.textContent = 'カメラを再起動';
+    } catch (e) {
+      showError('カメラを起動できませんでした: ' + e.message);
+    }
+  }
+
+  camBtn.addEventListener('click', startCamera);
+  camSwitch.addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera();
+  });
+
+  intervalSlider.addEventListener('input', () => {
+    intervalLabel.textContent = Number(intervalSlider.value).toFixed(1) + '秒';
+  });
+
+  // ─── Analysis loop ───────────────────────────────────────────────────────
+  function captureFrame() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    const maxW = 768;
+    const scale = Math.min(1, maxW / vw);
+    canvas.width = vw * scale;
+    canvas.height = vh * scale;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.85);
+  }
+
+  function scheduleNext(delay) {
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(runOnce, delay);
+  }
+
+  function runOnce() {
+    if (!analyzing || busy) return;
+    const frame = captureFrame();
+    if (!frame) { scheduleNext(300); return; }
+    busy = true;
+    setDetecting(true);
+    worker.postMessage({ type: 'generate', data: { image: frame, prompt: promptInput.value.trim() } });
+  }
+
+  toggleBtn.addEventListener('click', () => {
+    analyzing = !analyzing;
+    if (analyzing) {
+      sessionStart = sessionStart || performance.now();
+      toggleBtn.textContent = '解析を停止';
+      toggleBtn.classList.add('danger');
+      runOnce();
+    } else {
+      toggleBtn.textContent = '解析を開始';
+      toggleBtn.classList.remove('danger');
+      clearTimeout(pendingTimer);
+      setDetecting(false);
+      worker.postMessage({ type: 'interrupt' });
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+  });
 </script>
 </body>
 </html>
