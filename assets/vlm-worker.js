@@ -1,17 +1,18 @@
 import {
   AutoProcessor,
-  AutoModelForVision2Seq,
+  Qwen3VLForConditionalGeneration,
   TextStreamer,
   InterruptableStoppingCriteria,
   load_image,
-} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1";
+} from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0";
 
-// HuggingFaceTB/SmolVLM-Instruct: the original 2B-parameter SmolVLM checkpoint.
+// huggingworld/Qwen3-VL-2B-Instruct-ONNX: 2B-parameter Qwen3-VL checkpoint.
 // The decoder (the bulk of the 2B params) is quantized to 4-bit; the vision
-// encoder is kept at fp16 since encoder-decoder VLMs are sensitive to
+// encoder and token embeddings are kept at fp16 since VLMs are sensitive to
 // quantizing the vision tower.
-const MODEL_ID = "HuggingFaceTB/SmolVLM-Instruct";
+const MODEL_ID = "huggingworld/Qwen3-VL-2B-Instruct-ONNX";
 const MAX_NEW_TOKENS = 128;
+const IMAGE_SIZE = 448;
 
 async function check() {
   try {
@@ -36,11 +37,11 @@ class VLM {
       progress_callback,
     });
 
-    this.model ??= AutoModelForVision2Seq.from_pretrained(MODEL_ID, {
+    this.model ??= Qwen3VLForConditionalGeneration.from_pretrained(MODEL_ID, {
       dtype: {
         embed_tokens: "fp16",
         vision_encoder: "fp16",
-        decoder_model_merged: "q4",
+        decoder_model_merged: "q4f16",
       },
       device: "webgpu",
       progress_callback,
@@ -76,20 +77,14 @@ async function generate({ image, prompt }) {
   try {
     const [processor, model] = await VLM.getInstance();
 
+    const rawImage = await (await load_image(image)).resize(IMAGE_SIZE, IMAGE_SIZE);
+
     const messages = [
-      { role: "user", content: [{ type: "image", image }, { type: "text", text: prompt }] },
+      { role: "user", content: [{ type: "image" }, { type: "text", text: prompt }] },
     ];
 
-    const images = await Promise.all(
-      messages
-        .map((x) => x.content)
-        .flat(Infinity)
-        .filter((msg) => msg.image !== undefined)
-        .map((msg) => load_image(msg.image)),
-    );
-
     const text = processor.apply_chat_template(messages, { add_generation_prompt: true });
-    const inputs = await processor(text, images);
+    const inputs = await processor(text, rawImage);
 
     let startTime;
     let numTokens = 0;
